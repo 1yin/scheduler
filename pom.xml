@@ -1,0 +1,6 @@
+<project>
+    <modelVersion>1.0.0</modelVersion>
+    <groupId>lyin.scheduler</groupId>
+    <artifactId>flexible.scheduler</artifactId>
+    <version>1</version>
+</project>

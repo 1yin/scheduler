@@ -1,4 +1,4 @@
-package main.scheduler;
+package scheduler;
 
 import java.time.Duration;
 import java.util.concurrent.Callable;

@@ -2,7 +2,7 @@ package scheduler;
 
 import org.junit.jupiter.api.Test;
 
-public class FlexibleSchedulerThreadPoolExecutorTests {
+public class FlexibleSchedulerThreadPoolExecutorTest {
 
     @Test
     public void testOneShotOperation() {

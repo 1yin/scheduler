@@ -1,20 +1,11 @@
 package scheduler;
 
-import static java.util.Objects.requireNonNull;
-
 import java.time.Duration;
-import java.util.concurrent.Callable;
-import java.util.concurrent.Delayed;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
-import java.util.concurrent.RejectedExecutionHandler;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.*;
 import java.util.function.Consumer;
 import java.util.function.Function;
+
+import static java.util.Objects.requireNonNull;
 
 public class FlexibleScheduledThreadPoolExecutor
         extends ScheduledThreadPoolExecutor
@@ -39,6 +30,24 @@ public class FlexibleScheduledThreadPoolExecutor
         super(corePoolSize, threadFactory, handler);
     }
 
+    static <T> Function<Future<T>, Duration> getSchedulingFunc(Function<Future<T>, Duration> schedulingFunc) {
+        Function<Future<T>, Duration> schedulingFx;
+
+        if (schedulingFunc == null) {
+            schedulingFx = (future) -> null;
+        } else {
+            schedulingFx = (future) -> {
+                try {
+                    return schedulingFunc.apply(future);
+                } catch (RuntimeException e) {
+                    return null;
+                }
+            };
+        }
+
+        return schedulingFx;
+    }
+
     @Override
     public <T> ScheduledFuture<T> schedule(
             Callable<T> command,
@@ -60,27 +69,8 @@ public class FlexibleScheduledThreadPoolExecutor
         return future;
     }
 
-    static <T> Function<Future<T>, Duration> getSchedulingFunc(Function<Future<T>, Duration> schedulingFunc) {
-        Function<Future<T>, Duration> schedulingFx;
-
-        if (schedulingFunc == null) {
-            schedulingFx = (future) -> null;
-        } else {
-            schedulingFx = (future) -> {
-                try {
-                    return schedulingFunc.apply(future);
-                } catch (RuntimeException e) {
-                    return null;
-                }
-            };
-        }
-
-        return schedulingFx;
-    }
-
     static class ScheduledFutureTask<V> implements ScheduledFuture<V>, Consumer<ScheduledFuture<V>> {
         private volatile ScheduledFuture<V> future;
-
 
         @Override
         public long getDelay(TimeUnit unit) {
@@ -120,47 +110,6 @@ public class FlexibleScheduledThreadPoolExecutor
         @Override
         public void accept(ScheduledFuture<V> nextFuture) {
             future = requireNonNull(nextFuture, "next future is null");
-        }
-    }
-
-    class ReSchedulingTask<V> implements Callable<V> {
-        private final Callable<V> command;
-        private final Function<Future<V>, Duration> schedulingFx;
-        private final Consumer<ScheduledFuture<V>> callback;
-
-        ReSchedulingTask(
-                Callable<V> command,
-                Function<Future<V>, Duration> schedulingFx,
-                Consumer<ScheduledFuture<V>> callback) {
-            this.command = requireNonNull(command, "command is null");
-            this.schedulingFx = requireNonNull(schedulingFx, "scheduling function is null");
-            this.callback = callback;
-        }
-
-        @Override
-        public V call() throws Exception {
-            CompletedFuture<V> future;
-            try {
-                future = new CompletedFuture(command.call());
-            } catch (InterruptedException e) {
-                throw e;
-            } catch (Exception e) {
-                future = new CompletedFuture(e);
-            }
-
-            Duration delay = schedulingFx.apply(future);
-            if (delay != null) {
-                ScheduledFuture<V> nextFuture = FlexibleScheduledThreadPoolExecutor.this.schedule(
-                        command,
-                        delay.getNano(),
-                        TimeUnit.NANOSECONDS);
-
-                if (callback != null) {
-                    callback.accept(nextFuture);
-                }
-            }
-
-            return future.get();
         }
     }
 
@@ -207,6 +156,51 @@ public class FlexibleScheduledThreadPoolExecutor
         @Override
         public V get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException {
             return get();
+        }
+    }
+
+    class ReSchedulingTask<V> implements Callable<V> {
+        private final Callable<V> command;
+        private final Function<Future<V>, Duration> schedulingFx;
+        private final Consumer<ScheduledFuture<V>> callback;
+
+        ReSchedulingTask(
+                Callable<V> command,
+                Function<Future<V>, Duration> schedulingFx,
+                Consumer<ScheduledFuture<V>> callback) {
+            this.command = requireNonNull(command, "command is null");
+            this.schedulingFx = requireNonNull(schedulingFx, "scheduling function is null");
+            this.callback = callback;
+        }
+
+        @Override
+        public V call() throws Exception {
+            CompletedFuture<V> future;
+            try {
+                future = new CompletedFuture(command.call());
+            } catch (InterruptedException e) {
+                throw e;
+            } catch (Exception e) {
+                future = new CompletedFuture(e);
+            }
+
+            Duration delay = schedulingFx.apply(future);
+            if (delay != null) {
+                ScheduledFuture<V> nextFuture = FlexibleScheduledThreadPoolExecutor.this.schedule(
+                        command,
+                        delay.getNano(),
+                        TimeUnit.NANOSECONDS);
+
+                if (callback != null) {
+                    callback.accept(nextFuture);
+                }
+            }
+
+            try {
+                return future.get();
+            } catch (ExecutionException e) {
+                throw (Exception) e.getCause();
+            }
         }
     }
 }

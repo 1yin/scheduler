@@ -1,14 +1,17 @@
 package scheduler;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import scheduler.FlexibleScheduledThreadPoolExecutor.ReSchedulingTask;
 
 import java.time.Duration;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -18,16 +21,31 @@ import static org.mockito.Matchers.anyLong;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class ReschedulingTaskTest {
+    private final FlexibleScheduledThreadPoolExecutor executor =
+            spy(new FlexibleScheduledThreadPoolExecutor(1));
+    private final Function<Future<Integer>, Duration> fx = mock(Function.class);
+
+
+    @BeforeEach
+    public void setUp() {
+        reset(executor);
+        reset(fx);
+
+        when(fx.apply(any(Future.class)))
+                .thenReturn(Duration.ofMillis(1))
+                .thenReturn(null);
+    }
 
     @Test
     public void testWrappedTask() throws Exception {
         Integer result = 1;
-        FlexibleScheduledThreadPoolExecutor executor = spy(new FlexibleScheduledThreadPoolExecutor(1));
         Consumer<ScheduledFuture<Integer>> callback = mock(Consumer.class);
         doAnswer(
                 invocationOnMock -> {
@@ -43,7 +61,7 @@ public class ReschedulingTaskTest {
 
         ReSchedulingTask<Integer> wrappedTask = executor.new ReSchedulingTask<>(
                 () -> result,
-                future -> Duration.ofMillis(1),
+                fx,
                 callback);
 
         assertEquals(result, wrappedTask.call());
@@ -59,7 +77,7 @@ public class ReschedulingTaskTest {
                 () -> {
                     throw new InterruptedException();
                 },
-                future -> Duration.ofMillis(1),
+                fx,
                 callback);
 
         try {
@@ -91,7 +109,7 @@ public class ReschedulingTaskTest {
                 () -> {
                     throw new RuntimeException();
                 },
-                future -> Duration.ofMillis(1),
+                fx,
                 callback);
 
         assertThrows(RuntimeException.class, () -> wrappedTask.call());

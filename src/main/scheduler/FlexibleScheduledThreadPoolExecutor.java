@@ -63,8 +63,8 @@ public class FlexibleScheduledThreadPoolExecutor
         Function<Future<T>, Duration> schedulingFx = getSchedulingFunc(schedulingFunc);
 
         ScheduledFutureTask<T> future = new ScheduledFutureTask<>();
-        command = new ReSchedulingTask<>(command, schedulingFx, future);
-        future.accept(super.schedule(command, initialDelay.getNano(), TimeUnit.NANOSECONDS));
+        ReSchedulingTask<T> wrapped = new ReSchedulingTask<>(command, schedulingFx, future);
+        future.accept(schedule(wrapped, initialDelay.getNano(), TimeUnit.NANOSECONDS));
 
         return future;
     }
@@ -74,36 +74,43 @@ public class FlexibleScheduledThreadPoolExecutor
 
         @Override
         public long getDelay(TimeUnit unit) {
+            assert future != null;
             return future.getDelay(unit);
         }
 
         @Override
         public int compareTo(Delayed o) {
+            assert future != null;
             return future.compareTo(o);
         }
 
         @Override
         public boolean cancel(boolean mayInterruptIfRunning) {
+            assert future != null;
             return future.cancel(mayInterruptIfRunning);
         }
 
         @Override
         public boolean isCancelled() {
+            assert future != null;
             return future.isCancelled();
         }
 
         @Override
         public boolean isDone() {
+            assert future != null;
             return future.isDone();
         }
 
         @Override
         public V get() throws InterruptedException, ExecutionException {
+            assert future != null;
             return future.get();
         }
 
         @Override
         public V get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException {
+            assert future != null;
             return future.get(timeout, unit);
         }
 
@@ -177,17 +184,17 @@ public class FlexibleScheduledThreadPoolExecutor
         public V call() throws Exception {
             CompletedFuture<V> future;
             try {
-                future = new CompletedFuture(command.call());
+                future = new CompletedFuture<>(command.call());
             } catch (InterruptedException e) {
                 throw e;
             } catch (Exception e) {
-                future = new CompletedFuture(e);
+                future = new CompletedFuture<>(e);
             }
 
             Duration delay = schedulingFx.apply(future);
             if (delay != null) {
                 ScheduledFuture<V> nextFuture = FlexibleScheduledThreadPoolExecutor.this.schedule(
-                        command,
+                        this,
                         delay.getNano(),
                         TimeUnit.NANOSECONDS);
 

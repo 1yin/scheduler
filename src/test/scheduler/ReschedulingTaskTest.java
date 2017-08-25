@@ -7,6 +7,7 @@ import scheduler.FlexibleScheduledThreadPoolExecutor.ReSchedulingTask;
 import java.time.Duration;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -29,7 +30,13 @@ import static org.mockito.Mockito.when;
 
 public class ReschedulingTaskTest {
     private final FlexibleScheduledThreadPoolExecutor executor =
-            spy(new FlexibleScheduledThreadPoolExecutor(1));
+            spy(new FlexibleScheduledThreadPoolExecutor(
+                    1,
+                    r -> {
+                        Thread t = Executors.defaultThreadFactory().newThread(r);
+                        t.setDaemon(true);
+                        return t;
+                    }));
     private final Function<Future<Integer>, Duration> fx = mock(Function.class);
 
 

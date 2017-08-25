@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -30,7 +31,14 @@ import static scheduler.FlexibleScheduledThreadPoolExecutor.CompletedFuture;
 import static scheduler.FlexibleScheduledThreadPoolExecutor.getSchedulingFunc;
 
 public class FlexibleSchedulerThreadPoolExecutorTest {
-    private final FlexibleScheduledThreadPoolExecutor executor = spy(new FlexibleScheduledThreadPoolExecutor(1));
+    private final FlexibleScheduledThreadPoolExecutor executor =
+            spy(new FlexibleScheduledThreadPoolExecutor(
+                    1,
+                    r -> {
+                        Thread t = Executors.defaultThreadFactory().newThread(r);
+                        t.setDaemon(true);
+                        return t;
+                    }));
 
     @BeforeEach
     public void setUp() {
